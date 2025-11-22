@@ -1,0 +1,30 @@
+CIPHERMINT GAMING GATEWAY — PHASE 6 SNAPSHOT
+============================================
+
+System State:
+- SQLite schema: OK
+- Integration registration: OK
+- Player registration: OK
+- Balance credit (RACKDOG): OK
+- Fetch player state: OK
+- Demo script execution: PASS
+- Port 8080: Free after reset
+- Gateway server: Running cleanly
+
+Verified API Outputs:
+1) Health:
+   {"service":"CipherMint Gaming Gateway","status":"ok"}
+
+2) Register Integration:
+   {"id":"ghostops_cod","status":"ok"}
+
+3) Create Player:
+   {"alias":"GhostPlayer","balances":{},"integration":"ghostops_cod","player_id":"player123","status":"ok"}
+
+4) Signup Bonus:
+   {"amount":100,"source":"signup_bonus","status":"ok","token":"RACKDOG"}
+
+5) Fetch Player:
+   {"id":"player123","alias":"GhostPlayer","integration_id":"ghostops_cod","balances":{"RACKDOG":100}}
+
+Checkpoint created successfully.

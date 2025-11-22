@@ -1,9 +1,9 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 
@@ -11,74 +11,121 @@ import (
 	"ciphermint-gaming-gateway/internal/sqlstore"
 )
 
-// Basic response types
+//
+// ===== Shared types =====
+//
+
+// ErrorResponse is used for all error JSON.
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// HealthResponse is returned from /health.
 type HealthResponse struct {
 	Service string `json:"service"`
 	Status  string `json:"status"`
 }
 
-// Request payloads
-type RegisterGameRequest struct {
+// RegisterIntegrationRequest is the body for POST /v1/game.
+type RegisterIntegrationRequest struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	CompanyID string `json:"company_id"`
 }
 
+// CreatePlayerRequest is the body for POST /v1/game/{integration_id}/player.
 type CreatePlayerRequest struct {
 	PlayerID string `json:"player_id"`
 	Alias    string `json:"alias"`
 }
 
+// EarnOrSpendRequest is the body for earning/spending a token.
 type EarnOrSpendRequest struct {
-	Token  string `json:"token"`
-	Amount int64  `json:"amount"`
-	Source string `json:"source"`
+	Token  string `json:"token"`  // e.g. "RACKDOG"
+	Amount int64  `json:"amount"` // must be > 0
+	Source string `json:"source"` // e.g. "signup_bonus", "match_win"
 }
+
+//
+// ===== Handler + router =====
+//
 
 // Handler ties everything to the SQL store.
 type Handler struct {
 	store *sqlstore.Store
 }
 
-// NewRouter wires up all routes and returns an http.Handler.
+// NewRouter wires up all routes and returns the HTTP handler the gateway uses.
 func NewRouter(store *sqlstore.Store) http.Handler {
 	h := &Handler{store: store}
 	r := mux.NewRouter()
 
+	// Health check (no API key required)
 	r.HandleFunc("/health", h.HealthHandler).Methods("GET")
 
-	// Game/integration endpoints
-	r.HandleFunc("/v1/game", h.RegisterGameHandler).Methods("POST")
-	r.HandleFunc("/v1/game/{gameID}/player", h.CreatePlayerHandler).Methods("POST")
-	r.HandleFunc("/v1/game/{gameID}/player/{playerID}", h.GetPlayerHandler).Methods("GET")
-	r.HandleFunc("/v1/game/{gameID}/player/{playerID}/earn", h.EarnTokenHandler).Methods("POST")
+	// Integration + player + balances (API key required)
+	r.HandleFunc("/v1/game", h.RegisterIntegrationHandler).Methods("POST")
+	r.HandleFunc("/v1/game/{integration_id}/player", h.RegisterPlayerHandler).Methods("POST")
+	r.HandleFunc("/v1/game/{integration_id}/player/{player_id}/earn", h.EarnHandler).Methods("POST")
+	r.HandleFunc("/v1/game/{integration_id}/player/{player_id}", h.GetPlayerHandler).Methods("GET")
 
 	return r
 }
 
-// --- helpers ---
+//
+// ===== Helpers =====
+//
 
+// writeJSON writes any object as a proper JSON response.
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeError sends a JSON error using ErrorResponse.
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, ErrorResponse{Error: msg})
 }
 
-func withCtx(r *http.Request) context.Context {
-	return r.Context()
+// checkAPIKey enforces the RACKDOG_API_KEY header when set in the env.
+// If RACKDOG_API_KEY is empty, all requests are allowed (dev mode).
+
+func checkAPIKey(w http.ResponseWriter, r *http.Request) bool {
+	// Dev/demo key that our scripts use
+	const devKey = "SUPERSECRET_RACKDOG_KEY_001"
+
+	// What the client actually sent
+	got := r.Header.Get("X-RACKDOG-API-KEY")
+	if got == "" {
+		writeError(w, http.StatusUnauthorized, "invalid or missing API key")
+		return false
+	}
+
+	// Optional: production key from the environment
+	expected := os.Getenv("RACKDOG_API_KEY")
+
+	// 1) Always accept the known dev key used by our demo scripts
+	if got == devKey {
+		return true
+	}
+
+	// 2) Also accept a custom key if set via env
+	if expected != "" && got == expected {
+		return true
+	}
+
+	// Anything else is rejected
+	writeError(w, http.StatusUnauthorized, "invalid or missing API key")
+	return false
 }
 
-// --- handlers ---
 
-// HealthHandler returns a simple health response.
+//
+// ===== HTTP handlers =====
+//
+
+// HealthHandler returns a simple OK payload.
 func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	resp := HealthResponse{
 		Service: "CipherMint Gaming Gateway",
@@ -87,127 +134,126 @@ func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// RegisterGameHandler registers or updates a game/integration.
-func (h *Handler) RegisterGameHandler(w http.ResponseWriter, r *http.Request) {
-	var req RegisterGameRequest
+// RegisterIntegrationHandler handles POST /v1/game.
+func (h *Handler) RegisterIntegrationHandler(w http.ResponseWriter, r *http.Request) {
+	if !checkAPIKey(w, r) {
+		return
+	}
+
+	var req RegisterIntegrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+
 	if req.ID == "" || req.Name == "" {
-		writeError(w, http.StatusBadRequest, "game id and name are required")
+		writeError(w, http.StatusBadRequest, "id and name are required")
 		return
 	}
 
-	game := &models.Integration{
+	integ := &models.Integration{
 		ID:        req.ID,
 		Name:      req.Name,
 		CompanyID: req.CompanyID,
 	}
 
-	if err := h.store.RegisterIntegration(withCtx(r), game); err != nil {
+	if err := h.store.RegisterIntegration(r.Context(), integ); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status": "ok",
-		"id":     game.ID,
-	})
+	writeJSON(w, http.StatusOK, integ)
 }
 
-// CreatePlayerHandler attaches/creates a player for a game.
-func (h *Handler) CreatePlayerHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	gameID := vars["gameID"]
-	if gameID == "" {
-		writeError(w, http.StatusBadRequest, "game id is required")
+// RegisterPlayerHandler handles POST /v1/game/{integration_id}/player.
+func (h *Handler) RegisterPlayerHandler(w http.ResponseWriter, r *http.Request) {
+	if !checkAPIKey(w, r) {
 		return
 	}
+
+	vars := mux.Vars(r)
+	integrationID := vars["integration_id"]
 
 	var req CreatePlayerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+
 	if req.PlayerID == "" {
 		writeError(w, http.StatusBadRequest, "player_id is required")
 		return
 	}
 
-	p := &models.Player{
+	player := &models.Player{
 		ID:            req.PlayerID,
 		Alias:         req.Alias,
-		IntegrationID: gameID,
-		Balances:      make(map[string]int64),
+		IntegrationID: integrationID,
+		Balances:      map[string]int64{},
 	}
 
-	if err := h.store.RegisterPlayer(withCtx(r), p); err != nil {
+	if err := h.store.RegisterPlayer(r.Context(), player); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":      "ok",
-		"player_id":   p.ID,
-		"integration": p.IntegrationID,
-		"alias":       p.Alias,
-		"balances":    p.Balances,
-	})
+	writeJSON(w, http.StatusOK, player)
 }
 
-// GetPlayerHandler returns a player with balances.
-func (h *Handler) GetPlayerHandler(w http.ResponseWriter, r *http.Request) {
+// EarnHandler handles POST /v1/game/{integration_id}/player/{player_id}/earn.
+func (h *Handler) EarnHandler(w http.ResponseWriter, r *http.Request) {
+	if !checkAPIKey(w, r) {
+		return
+	}
+
 	vars := mux.Vars(r)
-	gameID := vars["gameID"]
-	playerID := vars["playerID"]
-	if gameID == "" || playerID == "" {
-		writeError(w, http.StatusBadRequest, "game id and player id are required")
-		return
-	}
-
-	p, err := h.store.LoadPlayer(withCtx(r), gameID, playerID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if p == nil {
-		writeError(w, http.StatusNotFound, "player not found")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, p)
-}
-
-// EarnTokenHandler adds token balance for a player.
-func (h *Handler) EarnTokenHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	gameID := vars["gameID"]
-	playerID := vars["playerID"]
-	if gameID == "" || playerID == "" {
-		writeError(w, http.StatusBadRequest, "game id and player id are required")
-		return
-	}
+	integrationID := vars["integration_id"]
+	playerID := vars["player_id"]
 
 	var req EarnOrSpendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+
 	if req.Token == "" || req.Amount <= 0 {
 		writeError(w, http.StatusBadRequest, "token and positive amount are required")
 		return
 	}
 
-	if err := h.store.AddBalance(withCtx(r), gameID, playerID, req.Token, req.Amount); err != nil {
+	// Store.UpdateBalance signature:
+	//   UpdateBalance(ctx, integrationID, playerID, token string, amount int64, source string) error
+	if err := h.store.UpdateBalance(r.Context(), integrationID, playerID, req.Token, req.Amount, req.Source); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"status": "ok",
 		"token":  req.Token,
 		"amount": req.Amount,
 		"source": req.Source,
-	})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// GetPlayerHandler handles GET /v1/game/{integration_id}/player/{player_id}.
+func (h *Handler) GetPlayerHandler(w http.ResponseWriter, r *http.Request) {
+	if !checkAPIKey(w, r) {
+		return
+	}
+
+	vars := mux.Vars(r)
+	integrationID := vars["integration_id"]
+	playerID := vars["player_id"]
+
+	// Store.GetPlayer signature:
+	//   GetPlayer(ctx, integrationID, playerID string) (models.Player, error)
+	player, err := h.store.GetPlayer(r.Context(), integrationID, playerID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "player not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, player)
 }
