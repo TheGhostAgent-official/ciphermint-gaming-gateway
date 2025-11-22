@@ -5,21 +5,20 @@ import (
 	"net/http"
 
 	"ciphermint-gaming-gateway/internal/api"
-	"ciphermint-gaming-gateway/internal/store"
+	"ciphermint-gaming-gateway/internal/sqlstore"
 )
 
 func main() {
-	// Initialize in-memory database
-	db := store.NewMemoryStore()
+	store, err := sqlstore.OpenDefault()
+	if err != nil {
+		log.Fatalf("open sqlite store: %v", err)
+	}
+	defer store.Close()
 
-	// Create HTTP handler set
-	handler := api.NewHandler(db)
-
-	// Build router
-	router := api.NewRouter(handler)
+	handler := api.NewRouter(store)
 
 	log.Println("CipherMint Gaming Gateway listening on :8080")
-	if err := http.ListenAndServe(":8080", router); err != nil {
+	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }
