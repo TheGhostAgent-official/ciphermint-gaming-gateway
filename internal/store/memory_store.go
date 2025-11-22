@@ -1,176 +1,135 @@
 package store
 
 import (
-    "errors"
-    "sync"
+	"errors"
+	"sync"
 
-    "ciphermint-gaming-gateway/internal/models"
+	"ciphermint-gaming-gateway/internal/models"
 )
 
-// Domain errors we can reuse in the API layer.
 var (
-    ErrGameNotFound        = errors.New("game not found")
-    ErrPlayerNotFound      = errors.New("player not found")
-    ErrInsufficientFunds   = errors.New("insufficient funds")
+	// ErrPlayerNotFound is returned when a player ID is unknown.
+	ErrPlayerNotFound = errors.New("player not found")
+
+	// ErrInsufficientFunds is returned when a spend would drop below zero.
+	ErrInsufficientFunds = errors.New("insufficient funds")
 )
 
-// Store is the interface our API layer will depend on.
-// This keeps things flexible if we later move from in-memory to a real database.
+// Store defines the behaviors the API layer needs from a backing store.
 type Store interface {
-    RegisterGame(game *models.Game) (*models.Game, error)
-    GetGame(id models.GameID) (*models.Game, error)
-
-    CreatePlayer(gameID models.GameID, playerID models.PlayerID, alias string) (*models.Player, error)
-    GetPlayer(gameID models.GameID, playerID models.PlayerID) (*models.Player, error)
-
-    Earn(gameID models.GameID, playerID models.PlayerID, token models.TokenSymbol, amount int64) (*models.Player, error)
-    Spend(gameID models.GameID, playerID models.PlayerID, token models.TokenSymbol, amount int64) (*models.Player, error)
+	CreatePlayer(id models.PlayerID, alias string) (*models.Player, error)
+	GetPlayer(id models.PlayerID) (*models.Player, error)
+	Earn(id models.PlayerID, token models.TokenSymbol, amount int64, source string) (*models.Player, error)
+	Spend(id models.PlayerID, token models.TokenSymbol, amount int64, reason string) (*models.Player, error)
 }
 
-// MemoryStore is our in-memory implementation of Store.
-// Internally, it organizes data like:
-// games[gameID] = *Game
-// players[gameID][playerID] = *Player
+// MemoryStore is a simple in-memory implementation (perfect for dev / demos).
 type MemoryStore struct {
-    mu      sync.RWMutex
-    games   map[models.GameID]*models.Game
-    players map[models.GameID]map[models.PlayerID]*models.Player
+	mu      sync.RWMutex
+	players map[models.PlayerID]*models.Player
 }
 
-// NewMemoryStore creates a new, empty in-memory store.
+// NewMemoryStore constructs a fresh empty store.
 func NewMemoryStore() *MemoryStore {
-    return &MemoryStore{
-        games:   make(map[models.GameID]*models.Game),
-        players: make(map[models.GameID]map[models.PlayerID]*models.Player),
-    }
+	return &MemoryStore{
+		players: make(map[models.PlayerID]*models.Player),
+	}
 }
 
-// RegisterGame registers or updates a game in the store.
-func (s *MemoryStore) RegisterGame(game *models.Game) (*models.Game, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
+func (s *MemoryStore) CreatePlayer(id models.PlayerID, alias string) (*models.Player, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-    if game.ID == "" {
-        return nil, errors.New("game id is required")
-    }
-    if game.Name == "" {
-        return nil, errors.New("game name is required")
-    }
+	// If the player already exists, just merge alias and return.
+	if existing, ok := s.players[id]; ok {
+		if alias != "" {
+			found := false
+			for _, a := range existing.Aliases {
+				if a == alias {
+					found = true
+					break
+				}
+			}
+			if !found {
+				existing.Aliases = append(existing.Aliases, alias)
+			}
+		}
+		return clonePlayer(existing), nil
+	}
 
-    s.games[game.ID] = game
+	player := &models.Player{
+		ID:       id,
+		Aliases:  nil,
+		Balances: make(map[models.TokenSymbol]int64),
+	}
+	if alias != "" {
+		player.Aliases = []string{alias}
+	}
 
-    // Ensure players map exists for this game.
-    if _, ok := s.players[game.ID]; !ok {
-        s.players[game.ID] = make(map[models.PlayerID]*models.Player)
-    }
-
-    return game, nil
+	s.players[id] = player
+	return clonePlayer(player), nil
 }
 
-// GetGame retrieves a game by its ID.
-func (s *MemoryStore) GetGame(id models.GameID) (*models.Game, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
+func (s *MemoryStore) GetPlayer(id models.PlayerID) (*models.Player, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-    g, ok := s.games[id]
-    if !ok {
-        return nil, ErrGameNotFound
-    }
-    return g, nil
+	player, ok := s.players[id]
+	if !ok {
+		return nil, ErrPlayerNotFound
+	}
+	return clonePlayer(player), nil
 }
 
-// CreatePlayer registers a new player under a specific game.
-func (s *MemoryStore) CreatePlayer(gameID models.GameID, playerID models.PlayerID, alias string) (*models.Player, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
+func (s *MemoryStore) Earn(id models.PlayerID, token models.TokenSymbol, amount int64, source string) (*models.Player, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-    // Ensure the game exists first.
-    if _, ok := s.games[gameID]; !ok {
-        return nil, ErrGameNotFound
-    }
+	player, ok := s.players[id]
+	if !ok {
+		return nil, ErrPlayerNotFound
+	}
 
-    // Ensure we have a players map for this game.
-    if _, ok := s.players[gameID]; !ok {
-        s.players[gameID] = make(map[models.PlayerID]*models.Player)
-    }
+	if player.Balances == nil {
+		player.Balances = make(map[models.TokenSymbol]int64)
+	}
+	player.Balances[token] += amount
 
-    // Create the player object.
-    p := &models.Player{
-        ID:       playerID,
-        GameID:   gameID,
-        Aliases:  []string{},
-        Balances: make(map[models.TokenSymbol]int64),
-    }
-
-    if alias != "" {
-        p.Aliases = append(p.Aliases, alias)
-    }
-
-    s.players[gameID][playerID] = p
-    return p, nil
+	return clonePlayer(player), nil
 }
 
-// GetPlayer fetches a player under a specific game.
-func (s *MemoryStore) GetPlayer(gameID models.GameID, playerID models.PlayerID) (*models.Player, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
+func (s *MemoryStore) Spend(id models.PlayerID, token models.TokenSymbol, amount int64, reason string) (*models.Player, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-    gamePlayers, ok := s.players[gameID]
-    if !ok {
-        return nil, ErrGameNotFound
-    }
+	player, ok := s.players[id]
+	if !ok {
+		return nil, ErrPlayerNotFound
+	}
 
-    p, ok := gamePlayers[playerID]
-    if !ok {
-        return nil, ErrPlayerNotFound
-    }
+	if player.Balances == nil || player.Balances[token] < amount {
+		return nil, ErrInsufficientFunds
+	}
 
-    return p, nil
+	player.Balances[token] -= amount
+	return clonePlayer(player), nil
 }
 
-// Earn credits tokens to a player's balance for a given game.
-func (s *MemoryStore) Earn(gameID models.GameID, playerID models.PlayerID, token models.TokenSymbol, amount int64) (*models.Player, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
+// clonePlayer returns a deep copy so callers can’t accidentally mutate store state.
+func clonePlayer(p *models.Player) *models.Player {
+	if p == nil {
+		return nil
+	}
 
-    gamePlayers, ok := s.players[gameID]
-    if !ok {
-        return nil, ErrGameNotFound
-    }
+	cp := &models.Player{
+		ID:      p.ID,
+		Aliases: append([]string(nil), p.Aliases...),
+	}
 
-    p, ok := gamePlayers[playerID]
-    if !ok {
-        return nil, ErrPlayerNotFound
-    }
+	cp.Balances = make(map[models.TokenSymbol]int64, len(p.Balances))
+	for k, v := range p.Balances {
+		cp.Balances[k] = v
+	}
 
-    if p.Balances == nil {
-        p.Balances = make(map[models.TokenSymbol]int64)
-    }
-
-    p.Balances[token] += amount
-    return p, nil
-}
-
-// Spend debits tokens from a player's balance for a given game.
-func (s *MemoryStore) Spend(gameID models.GameID, playerID models.PlayerID, token models.TokenSymbol, amount int64) (*models.Player, error) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-
-    gamePlayers, ok := s.players[gameID]
-    if !ok {
-        return nil, ErrGameNotFound
-    }
-
-    p, ok := gamePlayers[playerID]
-    if !ok {
-        return nil, ErrPlayerNotFound
-    }
-
-    current := p.Balances[token]
-    if current < amount {
-        return nil, ErrInsufficientFunds
-    }
-
-    p.Balances[token] = current - amount
-    return p, nil
+	return cp
 }
