@@ -9,14 +9,12 @@ import (
 )
 
 func main() {
-	// Open the SQLite-backed store
 	store, err := sqlstore.OpenDefault()
 	if err != nil {
 		log.Fatalf("open sqlite store: %v", err)
 	}
 	defer store.Close()
 
-	// Build the HTTP router (health + game/player/balance API)
 	handler := api.NewRouter(store)
 
 	log.Println("CipherMint Gaming Gateway listening on :8080")
