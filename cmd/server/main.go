@@ -2,14 +2,19 @@ package server
 
 import (
     "ciphermint-gaming-gateway/internal/api"
-    "fmt"
+    "ciphermint-gaming-gateway/internal/store"
     "log"
     "net/http"
 )
 
+// Start bootstraps the in-memory store, builds the router,
+// and starts the HTTP server on :8080.
 func Start() {
-    router := api.NewRouter()
+    s := store.NewMemoryStore()
+    r := api.NewRouter(s)
 
-    fmt.Println("CypherMint Gaming Gateway running on port 8080...")
-    log.Fatal(http.ListenAndServe(":8080", router))
+    log.Println("CipherMint Gaming Gateway listening on :8080")
+    if err := http.ListenAndServe(":8080", r); err != nil {
+        log.Fatalf("server failed: %v", err)
+    }
 }
