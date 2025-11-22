@@ -1,27 +1,25 @@
 package main
 
 import (
-    "log"
-    "net/http"
+	"log"
+	"net/http"
 
-    "github.com/gorilla/mux"
-
-    "ciphermint-gaming-gateway/internal/player"
+	"ciphermint-gaming-gateway/internal/api"
+	"ciphermint-gaming-gateway/internal/store"
 )
 
 func main() {
-    r := mux.NewRouter()
+	// Initialize in-memory database
+	db := store.NewMemoryStore()
 
-    // Health check
-    r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte("CipherMint Gaming Gateway is running"))
-    }).Methods("GET")
+	// Create HTTP handler set
+	handler := api.NewHandler(db)
 
-    // Player endpoints
-    r.HandleFunc("/v1/player/create", player.CreatePlayerHandler).Methods("POST")
-    r.HandleFunc("/v1/player/{id}", player.GetPlayerHandler).Methods("GET")
-    r.HandleFunc("/v1/player/{id}/earn", player.EarnTokenHandler).Methods("POST")
+	// Build router
+	router := api.NewRouter(handler)
 
-    log.Println("CipherMint Gaming Gateway listening on :8080")
-    log.Fatal(http.ListenAndServe(":8080", r))
+	log.Println("CipherMint Gaming Gateway listening on :8080")
+	if err := http.ListenAndServe(":8080", router); err != nil {
+		log.Fatalf("server failed: %v", err)
+	}
 }
