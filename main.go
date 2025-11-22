@@ -4,18 +4,21 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gorilla/mux"
-
 	"ciphermint-gaming-gateway/internal/api"
+	"ciphermint-gaming-gateway/internal/sqlstore"
 )
 
 func main() {
-	r := mux.NewRouter()
-	api.RegisterRoutes(r)
+	store, err := sqlstore.OpenDefault()
+	if err != nil {
+		log.Fatalf("open sqlite store: %v", err)
+	}
+	defer store.Close()
+
+	handler := api.NewRouter(store)
 
 	log.Println("CipherMint Gaming Gateway listening on :8080")
-
-	if err := http.ListenAndServe(":8080", r); err != nil {
-		log.Fatal(err)
+	if err := http.ListenAndServe(":8080", handler); err != nil {
+		log.Fatalf("server failed: %v", err)
 	}
 }
