@@ -2,178 +2,173 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
-	"ciphermint-gaming-gateway/internal/models"
-	"ciphermint-gaming-gateway/internal/store"
 	"github.com/gorilla/mux"
 )
 
-// Handler wires HTTP handlers to the backing store.
-type Handler struct {
-	store store.Store
+// Game represents a game integration (e.g. "Ghost Ops — CoD Integration").
+type Game struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	CompanyID string `json:"company_id"`
 }
 
-// NewHandler builds a Handler from a Store.
-func NewHandler(s store.Store) *Handler {
-	return &Handler{store: s}
+// Player represents a single gamer account inside one game's economy.
+// Example: one Xbox Live account inside a specific title.
+type Player struct {
+	ID       string         `json:"player_id"`
+	GameID   string         `json:"game_id"`
+	Aliases  []string       `json:"aliases"`
+	Balances map[string]int `json:"balances"`
 }
 
-// NewRouter builds the HTTP router with all routes and middlewares.
-func NewRouter(h *Handler) *mux.Router {
-	r := mux.NewRouter()
+// RegisterRoutes wires all HTTP routes for the CipherMint Gaming Gateway.
+func RegisterRoutes(r *mux.Router) {
+	r.HandleFunc("/health", HealthHandler).Methods(http.MethodGet)
 
-	// Simple health check for studios / infra
-	r.HandleFunc("/health", h.Health).Methods(http.MethodGet)
+	r.HandleFunc("/v1/game", CreateGameHandler).Methods(http.MethodPost)
 
-	// Versioned API
-	v1 := r.PathPrefix("/v1").Subrouter()
-	v1.HandleFunc("/player", h.CreatePlayer).Methods(http.MethodPost)
-	v1.HandleFunc("/player/{id}", h.GetPlayer).Methods(http.MethodGet)
-	v1.HandleFunc("/player/{id}/earn", h.EarnTokens).Methods(http.MethodPost)
-	v1.HandleFunc("/player/{id}/spend", h.SpendTokens).Methods(http.MethodPost)
+	r.HandleFunc("/v1/game/{gameID}/player", CreatePlayerHandler).Methods(http.MethodPost)
 
-	return r
+	r.HandleFunc("/v1/game/{gameID}/player/{playerID}", GetPlayerHandler).Methods(http.MethodGet)
+
+	r.HandleFunc("/v1/game/{gameID}/player/{playerID}/earn", EarnTokenHandler).Methods(http.MethodPost)
 }
 
-// --- Handlers ---
-
-func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status":  "ok",
-		"service": "ciphermint-gaming-gateway",
+// HealthHandler returns a simple service health indicator.
+func HealthHandler(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, healthResponse{
+		Service: "CipherMint Gaming Gateway",
+		Status:  "ok",
 	})
 }
 
-func (h *Handler) CreatePlayer(w http.ResponseWriter, r *http.Request) {
-	var req models.CreatePlayerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+// CreateGameHandler registers a new game integration.
+func CreateGameHandler(w http.ResponseWriter, r *http.Request) {
+	type createGameRequest struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		CompanyID string `json:"company_id"`
+	}
+
+	var body createGameRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.PlayerID == "" {
+
+	if body.ID == "" || body.Name == "" {
+		writeError(w, http.StatusBadRequest, "game id and name are required")
+		return
+	}
+
+	game := Game{
+		ID:        body.ID,
+		Name:      body.Name,
+		CompanyID: body.CompanyID,
+	}
+
+	writeJSON(w, http.StatusCreated, game)
+}
+
+// CreatePlayerHandler creates a player profile under a given game.
+// This is where your "Xbox account signs into Ghost Ops and gets tokens"
+// flow will eventually plug into real storage.
+func CreatePlayerHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameID := vars["gameID"]
+
+	if gameID == "" {
+		writeError(w, http.StatusBadRequest, "gameID path param is required")
+		return
+	}
+
+	type createPlayerRequest struct {
+		PlayerID string   `json:"player_id"`
+		Aliases  []string `json:"aliases"`
+	}
+
+	var body createPlayerRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if body.PlayerID == "" {
 		writeError(w, http.StatusBadRequest, "player_id is required")
 		return
 	}
 
-	player, err := h.store.CreatePlayer(req.PlayerID, req.Alias)
-	if err != nil {
-		log.Printf("CreatePlayer error: %v", err)
-		writeError(w, http.StatusInternalServerError, "unable to create player")
-		return
+	p := Player{
+		ID:       body.PlayerID,
+		GameID:   gameID,
+		Aliases:  body.Aliases,
+		Balances: map[string]int{},
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]*models.Player{
-		"player": player,
-	})
+	writeJSON(w, http.StatusCreated, p)
 }
 
-func (h *Handler) GetPlayer(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing player id in path")
+// GetPlayerHandler returns a minimal player snapshot.
+// Phase 3: this will query storage; for now it just echoes a basic struct.
+func GetPlayerHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameID := vars["gameID"]
+	playerID := vars["playerID"]
+
+	if gameID == "" || playerID == "" {
+		writeError(w, http.StatusBadRequest, "gameID and playerID path params are required")
 		return
 	}
 
-	player, err := h.store.GetPlayer(models.PlayerID(id))
-	if err != nil {
-		if err == store.ErrPlayerNotFound {
-			writeError(w, http.StatusNotFound, "player not found")
-			return
-		}
-		log.Printf("GetPlayer error: %v", err)
-		writeError(w, http.StatusInternalServerError, "unable to fetch player")
-		return
+	p := Player{
+		ID:       playerID,
+		GameID:   gameID,
+		Aliases:  []string{},
+		Balances: map[string]int{},
 	}
 
-	writeJSON(w, http.StatusOK, map[string]*models.Player{
-		"player": player,
-	})
+	writeJSON(w, http.StatusOK, p)
 }
 
-func (h *Handler) EarnTokens(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing player id in path")
+// EarnTokenHandler credits a player with tokens for some in-game action
+// (login bonus, streak, match win, etc.).
+func EarnTokenHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameID := vars["gameID"]
+	playerID := vars["playerID"]
+
+	if gameID == "" || playerID == "" {
+		writeError(w, http.StatusBadRequest, "gameID and playerID path params are required")
 		return
 	}
 
-	var req models.EarnRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	type earnTokenRequest struct {
+		Token  string `json:"token"`
+		Amount int    `json:"amount"`
+		Source string `json:"source"`
+	}
+
+	var body earnTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Token == "" || req.Amount <= 0 {
+
+	if body.Token == "" || body.Amount <= 0 {
 		writeError(w, http.StatusBadRequest, "token and positive amount are required")
 		return
 	}
 
-	player, err := h.store.Earn(models.PlayerID(id), req.Token, req.Amount, req.Source)
-	if err != nil {
-		if err == store.ErrPlayerNotFound {
-			writeError(w, http.StatusNotFound, "player not found")
-			return
-		}
-		log.Printf("EarnTokens error: %v", err)
-		writeError(w, http.StatusInternalServerError, "unable to apply earn event")
-		return
+	response := map[string]interface{}{
+		"status":    "ok",
+		"game_id":   gameID,
+		"player_id": playerID,
+		"token":     body.Token,
+		"amount":    body.Amount,
+		"source":    body.Source,
 	}
 
-	writeJSON(w, http.StatusOK, map[string]*models.Player{
-		"player": player,
-	})
-}
-
-func (h *Handler) SpendTokens(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing player id in path")
-		return
-	}
-
-	var req models.SpendRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if req.Token == "" || req.Amount <= 0 {
-		writeError(w, http.StatusBadRequest, "token and positive amount are required")
-		return
-	}
-
-	player, err := h.store.Spend(models.PlayerID(id), req.Token, req.Amount, req.Reason)
-	if err != nil {
-		if err == store.ErrPlayerNotFound {
-			writeError(w, http.StatusNotFound, "player not found")
-			return
-		}
-		if err == store.ErrInsufficientFunds {
-			writeError(w, http.StatusConflict, "insufficient funds")
-			return
-		}
-		log.Printf("SpendTokens error: %v", err)
-		writeError(w, http.StatusInternalServerError, "unable to apply spend event")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]*models.Player{
-		"player": player,
-	})
-}
-
-// --- helpers ---
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		log.Printf("writeJSON error: %v", err)
-	}
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{
-		"error": msg,
-	})
+	writeJSON(w, http.StatusOK, response)
 }

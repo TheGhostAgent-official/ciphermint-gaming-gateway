@@ -15,18 +15,18 @@ type Player struct {
 
 // EarnRequest represents a request to reward tokens to a player.
 type EarnRequest struct {
-	Token    TokenSymbol        `json:"token"`
-	Amount   int64              `json:"amount"`
-	Source   string             `json:"source"`             // e.g. "quest", "win", "achievement"
-	Metadata map[string]string  `json:"metadata,omitempty"` // optional, for studios to extend
+	Token    TokenSymbol       `json:"token"`
+	Amount   int64             `json:"amount"`
+	Source   string            `json:"source"`             // e.g. "quest", "win", "achievement"
+	Metadata map[string]string `json:"metadata,omitempty"` // optional, for studios to extend
 }
 
 // SpendRequest represents a request to spend tokens (for items, skins, etc.).
 type SpendRequest struct {
-	Token    TokenSymbol        `json:"token"`
-	Amount   int64              `json:"amount"`
-	Reason   string             `json:"reason"`             // e.g. "skin_purchase"
-	Metadata map[string]string  `json:"metadata,omitempty"` // optional
+	Token    TokenSymbol       `json:"token"`
+	Amount   int64             `json:"amount"`
+	Reason   string            `json:"reason"`             // e.g. "skin_purchase"
+	Metadata map[string]string `json:"metadata,omitempty"` // optional
 }
 
 // CreatePlayerRequest is used to register a new player.
