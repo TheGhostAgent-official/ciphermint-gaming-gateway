@@ -15,7 +15,7 @@ type Store struct {
 	db *sql.DB
 }
 
-// OpenDefault opens (or creates) the SQLite DB file.
+// OpenDefault opens (or creates) the SQLite DB file and runs migrations.
 func OpenDefault() (*Store, error) {
 	db, err := sql.Open("sqlite3", "./ciphermint_gateway.db?_fk=1")
 	if err != nil {
@@ -47,57 +47,68 @@ func (s *Store) Close() error {
 // migrate ensures the tables we need exist.
 func (s *Store) migrate() error {
 	schema := `
-CREATE TABLE IF NOT EXISTS integrations (
-	id TEXT PRIMARY KEY,
-	name TEXT NOT NULL,
-	company_id TEXT
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS games (
+	id          TEXT PRIMARY KEY,
+	name        TEXT NOT NULL,
+	company_id  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS players (
-	id TEXT PRIMARY KEY,
-	alias TEXT NOT NULL,
+	id             TEXT PRIMARY KEY,
+	alias          TEXT,
 	integration_id TEXT NOT NULL,
-	FOREIGN KEY (integration_id) REFERENCES integrations(id)
+	FOREIGN KEY (integration_id) REFERENCES games(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS balances (
-	player_id TEXT NOT NULL,
+	player_id      TEXT NOT NULL,
 	integration_id TEXT NOT NULL,
-	token TEXT NOT NULL,
-	amount INTEGER NOT NULL DEFAULT 0,
+	token          TEXT NOT NULL,
+	amount         INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY (player_id, integration_id, token),
-	FOREIGN KEY (player_id) REFERENCES players(id)
+	FOREIGN KEY (player_id)      REFERENCES players(id) ON DELETE CASCADE,
+	FOREIGN KEY (integration_id) REFERENCES games(id)   ON DELETE CASCADE
 );
 `
 	_, err := s.db.Exec(schema)
 	return err
 }
 
-// RegisterIntegration inserts or updates an integration.
-func (s *Store) RegisterIntegration(ctx context.Context, integ *models.Integration) error {
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO integrations (id, name, company_id)
-VALUES (?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
-	name=excluded.name,
-	company_id=excluded.company_id
-`, integ.ID, integ.Name, integ.CompanyID)
+// RegisterIntegration inserts or updates a game/integration.
+func (s *Store) RegisterIntegration(ctx context.Context, game *models.Integration) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO games (id, name, company_id)
+         VALUES (?, ?, ?)
+         ON CONFLICT(id) DO UPDATE
+         SET name = excluded.name,
+             company_id = excluded.company_id`,
+		game.ID,
+		game.Name,
+		game.CompanyID,
+	)
 	return err
 }
 
 // RegisterPlayer inserts or updates a player.
-func (s *Store) RegisterPlayer(ctx context.Context, player *models.Player) error {
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO players (id, alias, integration_id)
-VALUES (?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
-	alias=excluded.alias,
-	integration_id=excluded.integration_id
-`, player.ID, player.Alias, player.IntegrationID)
+func (s *Store) RegisterPlayer(ctx context.Context, p *models.Player) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO players (id, alias, integration_id)
+         VALUES (?, ?, ?)
+         ON CONFLICT(id) DO UPDATE
+         SET alias = excluded.alias,
+             integration_id = excluded.integration_id`,
+		p.ID,
+		p.Alias,
+		p.IntegrationID,
+	)
 	return err
 }
 
-// UpdateBalance applies a delta amount to a player's token balance.
+// UpdateBalance adds a positive amount to a player's balance for a given token.
 func (s *Store) UpdateBalance(
 	ctx context.Context,
 	integrationID string,
@@ -109,78 +120,102 @@ func (s *Store) UpdateBalance(
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
 
-	// Ensure player exists in this integration.
-	var exists int
-	if err := tx.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM players
-WHERE id = ? AND integration_id = ?
-`, playerID, integrationID).Scan(&exists); err != nil {
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Ensure the balance row exists
+	if _, err = tx.ExecContext(
+		ctx,
+		`INSERT INTO balances (player_id, integration_id, token, amount)
+         VALUES (?, ?, ?, 0)
+         ON CONFLICT(player_id, integration_id, token) DO NOTHING`,
+		playerID,
+		integrationID,
+		token,
+	); err != nil {
 		return err
 	}
-	if exists == 0 {
-		return fmt.Errorf("player does not belong to this integration")
-	}
 
-	// Upsert balance.
-	_, err = tx.ExecContext(ctx, `
-INSERT INTO balances (player_id, integration_id, token, amount)
-VALUES (?, ?, ?, ?)
-ON CONFLICT(player_id, integration_id, token) DO UPDATE SET
-	amount = balances.amount + excluded.amount
-`, playerID, integrationID, token, amount)
-	if err != nil {
+	// Increment the amount
+	if _, err = tx.ExecContext(
+		ctx,
+		`UPDATE balances
+         SET amount = amount + ?
+         WHERE player_id = ? AND integration_id = ? AND token = ?`,
+		amount,
+		playerID,
+		integrationID,
+		token,
+	); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-// GetPlayer loads a player and all balances inside an integration.
+// GetPlayer loads a player and all of their balances for a given integration.
 func (s *Store) GetPlayer(
 	ctx context.Context,
 	integrationID string,
 	playerID string,
 ) (*models.Player, error) {
-	row := s.db.QueryRowContext(ctx, `
-SELECT id, alias, integration_id
-FROM players
-WHERE id = ? AND integration_id = ?
-`, playerID, integrationID)
+	var (
+		id   string
+		alias string
+		integ string
+	)
 
-	var p models.Player
-	if err := row.Scan(&p.ID, &p.Alias, &p.IntegrationID); err != nil {
+	row := s.db.QueryRowContext(
+		ctx,
+		`SELECT id, alias, integration_id
+         FROM players
+         WHERE id = ? AND integration_id = ?`,
+		playerID,
+		integrationID,
+	)
+
+	if err := row.Scan(&id, &alias, &integ); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("player not found")
 		}
 		return nil, err
 	}
 
-	p.Balances = make(map[string]int64)
-
-	rows, err := s.db.QueryContext(ctx, `
-SELECT token, amount
-FROM balances
-WHERE player_id = ? AND integration_id = ?
-`, playerID, integrationID)
+	// Load balances
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT token, amount
+         FROM balances
+         WHERE player_id = ? AND integration_id = ?`,
+		playerID,
+		integrationID,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	balances := make(map[string]int64)
 	for rows.Next() {
 		var token string
 		var amt int64
 		if err := rows.Scan(&token, &amt); err != nil {
 			return nil, err
 		}
-		p.Balances[token] = amt
+		balances[token] = amt
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	return &p, nil
+	return &models.Player{
+		ID:            id,
+		Alias:         alias,
+		IntegrationID: integ,
+		Balances:      balances,
+	}, nil
 }

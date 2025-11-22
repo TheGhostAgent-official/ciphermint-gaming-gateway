@@ -2,11 +2,11 @@
 set -euo pipefail
 
 BASE_URL="http://localhost:8080"
-HDR_API_KEY="${RACKDOG_API_KEY:-SUPERSECRET_RACKDOG_KEY_001}"
+HDR_API_KEY="SUPERSECRET_RACKDOG_KEY_001"
 
-echo "==================================="
-echo " CipherMint Gaming Gateway -- RACKDOG DEMO"
-echo "==================================="
+echo "====================================="
+echo " CipherMint Gaming Gateway – RACKDOG DEMO"
+echo "====================================="
 
 echo
 echo "1) Health check..."
