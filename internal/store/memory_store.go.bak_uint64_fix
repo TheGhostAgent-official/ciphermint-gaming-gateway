@@ -1,0 +1,61 @@
+package store
+
+import (
+	"context"
+	"sync"
+
+	"ciphermint-gaming-gateway/internal/models"
+)
+
+type MemoryStore struct {
+	mu      sync.RWMutex
+	games   map[string]*models.Integration
+	players map[string]*models.Player
+}
+
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{
+		games:   make(map[string]*models.Integration),
+		players: make(map[string]*models.Player),
+	}
+}
+
+func (m *MemoryStore) RegisterIntegration(ctx context.Context, g *models.Integration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.games[g.ID] = g
+	return nil
+}
+
+func (m *MemoryStore) RegisterPlayer(ctx context.Context, p *models.Player) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.players[p.ID] = p
+	return nil
+}
+
+func (m *MemoryStore) UpdateBalance(ctx context.Context, playerID, token string, amount int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	p, ok := m.players[playerID]
+	if !ok {
+		return nil
+	}
+
+	if p.Balances == nil {
+		p.Balances = make(map[string]int64)
+	}
+
+	p.Balances[token] += amount
+	return nil
+}
+
+// SavePlayer stores or updates a player in the in-memory demo store.
+func (m *MemoryStore) SavePlayer(p *models.Player) error {
+    if m.players == nil {
+        m.players = make(map[string]*models.Player)
+    }
+    m.players[p.ID] = p
+    return nil
+}

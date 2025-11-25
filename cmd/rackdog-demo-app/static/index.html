@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RackDog™ Rewards – Powered by CipherMint™</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-main">CipherMint™ Studios</span>
+        <span class="brand-sub">RackDog™ Gaming Wallet</span>
+      </div>
+      <div class="powered">Powered by CipherMint™ Gaming Gateway</div>
+    </header>
+
+    <main class="app-main">
+      <!-- STEP NAV -->
+      <nav class="step-nav">
+        <button class="step-pill active" data-step="welcome">Welcome</button>
+        <button class="step-pill" data-step="account">Create Account</button>
+        <button class="step-pill" data-step="card">Add Card</button>
+        <button class="step-pill" data-step="wallet">Wallet</button>
+        <button class="step-pill" data-step="platform">Connect Platform</button>
+        <button class="step-pill" data-step="withdraw">Withdraw</button>
+      </nav>
+
+      <!-- SCREENS -->
+
+      <!-- WELCOME -->
+      <section class="screen screen-active" id="screen-welcome">
+        <h1>Turn Playtime into Real Value</h1>
+        <p>
+          This RackDog™ demo shows how a player can
+          <strong>create an account</strong>, receive a
+          <strong>100 RACKDOG™ sign-up bonus</strong>, and
+          <strong>withdraw value to their card</strong> –
+          using the same logic we wired into the CipherMint™ Gaming Gateway.
+        </p>
+        <button class="primary-btn" id="btn-start">
+          Start Demo
+        </button>
+      </section>
+
+      <!-- CREATE ACCOUNT -->
+      <section class="screen" id="screen-account">
+        <h2>Create Your RackDog™ Account</h2>
+        <form id="form-account" class="card">
+          <div class="field-row">
+            <label>Gamer Tag</label>
+            <input type="text" id="acct-gamertag" required placeholder="GhostRunner_92" />
+          </div>
+          <div class="field-row">
+            <label>Email</label>
+            <input type="email" id="acct-email" required placeholder="you@example.com" />
+          </div>
+          <div class="field-row">
+            <label>Phone</label>
+            <input type="tel" id="acct-phone" required placeholder="+1 555 123 4567" />
+          </div>
+          <div class="field-row">
+            <label>Password</label>
+            <input type="password" id="acct-password" required placeholder="••••••••" />
+          </div>
+          <label class="checkbox-row">
+            <input type="checkbox" id="acct-terms" required />
+            <span>I accept the RackDog™ Terms &amp; CipherMint™ Rewards Policy.</span>
+          </label>
+          <button type="submit" class="primary-btn full-width">
+            Continue to Card Setup
+          </button>
+        </form>
+      </section>
+
+      <!-- ADD CARD -->
+      <section class="screen" id="screen-card">
+        <h2>Add Payout Card</h2>
+        <p class="hint">
+          In a live deployment, CipherMint™ would connect to a compliant payout rail.
+          Here we simulate the experience for studios and investors.
+        </p>
+        <form id="form-card" class="card">
+          <div class="field-row">
+            <label>Card Number</label>
+            <input type="text" id="card-number" required placeholder="4242 4242 4242 4242" />
+          </div>
+          <div class="two-col">
+            <div class="field-row">
+              <label>Expiry</label>
+              <input type="text" id="card-expiry" required placeholder="12/28" />
+            </div>
+            <div class="field-row">
+              <label>CVV</label>
+              <input type="text" id="card-cvv" required placeholder="123" />
+            </div>
+          </div>
+          <div class="field-row">
+            <label>Billing ZIP</label>
+            <input type="text" id="card-zip" required placeholder="10001" />
+          </div>
+          <button type="submit" class="primary-btn full-width">
+            Save Card &amp; Claim 100 RACKDOG™
+          </button>
+        </form>
+      </section>
+
+      <!-- WALLET -->
+      <section class="screen" id="screen-wallet">
+        <h2>Your RackDog™ Wallet</h2>
+        <div class="wallet-card card">
+          <div class="wallet-row">
+            <span class="label">Player</span>
+            <span class="value" id="wallet-player">—</span>
+          </div>
+          <div class="wallet-row">
+            <span class="label">Token</span>
+            <span class="value">RACKDOG™</span>
+          </div>
+          <div class="wallet-row">
+            <span class="label">Balance</span>
+            <span class="value" id="wallet-balance">0</span>
+          </div>
+          <div class="wallet-row">
+            <span class="label">Est. Value (USD)</span>
+            <span class="value" id="wallet-value">$0.00</span>
+          </div>
+        </div>
+        <p class="hint">
+          This wallet mirrors the model we use inside the CipherMint™ Gaming Gateway:
+          <strong>player → integration → token balances per game.</strong>
+        </p>
+        <button class="secondary-btn" id="btn-view-earnings">
+          View Earnings Breakdown
+        </button>
+        <div class="card" id="earnings-panel" hidden>
+          <h3>Sample Earnings Breakdown</h3>
+          <ul class="earnings-list">
+            <li>+50 RACKDOG™ – Daily login streak (7 days)</li>
+            <li>+30 RACKDOG™ – Match wins this week</li>
+            <li>+20 RACKDOG™ – Event participation</li>
+          </ul>
+          <p class="hint small">
+            In production, these events would come from the game servers and route
+            through the CipherMint™ Gateway into the player’s token balance.
+          </p>
+        </div>
+      </section>
+
+      <!-- CONNECT PLATFORM -->
+      <section class="screen" id="screen-platform">
+        <h2>Connect Your Gaming Platform</h2>
+        <p>
+          Here we show how a player links their existing identity (Xbox Live, PlayStation Network,
+          Steam, etc.) to their CipherMint™-powered RackDog™ wallet.
+        </p>
+        <div class="platform-grid">
+          <button class="platform-btn" data-platform="Xbox">
+            Connect Xbox Account
+          </button>
+          <button class="platform-btn" data-platform="PlayStation">
+            Connect PlayStation Network
+          </button>
+          <button class="platform-btn" data-platform="Steam">
+            Connect Steam
+          </button>
+        </div>
+        <div class="card" id="platform-status" hidden>
+          <h3>Linked Platform</h3>
+          <p id="platform-text"></p>
+        </div>
+      </section>
+
+      <!-- WITHDRAW -->
+      <section class="screen" id="screen-withdraw">
+        <h2>Withdraw to Card (Demo)</h2>
+        <p class="hint">
+          This simulates what a real withdrawal would feel like once CipherMint™ is wired
+          into a studio’s payout stack. No real money moves here – this is presentation only.
+        </p>
+        <form id="form-withdraw" class="card">
+          <div class="field-row">
+            <label>Available RACKDOG™</label>
+            <input type="text" id="withdraw-available" readonly />
+          </div>
+          <div class="field-row">
+            <label>RACKDOG™ to withdraw</label>
+            <input type="number" id="withdraw-amount" min="1" required />
+          </div>
+          <button type="submit" class="primary-btn full-width">
+            Request Withdrawal
+          </button>
+        </form>
+        <div class="card" id="withdraw-result" hidden>
+          <h3>Withdrawal Request Created</h3>
+          <p id="withdraw-message"></p>
+          <p class="hint small">
+            In live environments, this would call the CipherMint™ Gateway, update the
+            player’s on-chain balance, and trigger a compliant payout to their card.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>RackDog™ Demo • CipherMint™ Studios • Plug-and-Play Gaming Economy Layer</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

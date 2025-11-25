@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RackDog™ Gaming Wallet • Powered by CipherMint™</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top left, #0f172a, #020617);
+      color: #e5e7eb;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+    .app {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(15,23,42,0.95);
+      border-radius: 20px;
+      box-shadow: 0 24px 80px rgba(15,23,42,0.85);
+      padding: 20px 20px 24px;
+      border: 1px solid rgba(148,163,184,0.3);
+    }
+    .studio {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #a5b4fc;
+    }
+    .title {
+      margin-top: 6px;
+      font-weight: 700;
+      font-size: 20px;
+    }
+    .badge {
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #22c55e, #06b6d4);
+      font-size: 11px;
+      font-weight: 600;
+      color: #022c22;
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 18px 0 16px;
+    }
+    .tab {
+      flex: 1 1 auto;
+      min-width: 80px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.35);
+      font-size: 11px;
+      text-align: center;
+      cursor: pointer;
+      color: #cbd5f5;
+      background: rgba(15,23,42,0.8);
+    }
+    .tab.active {
+      background: linear-gradient(90deg, #22c55e, #0ea5e9);
+      color: #0b1120;
+      border-color: transparent;
+      font-weight: 600;
+    }
+    .card {
+      margin-top: 6px;
+      padding: 16px 14px 14px;
+      border-radius: 18px;
+      background: radial-gradient(circle at top left, #0f172a, #020617);
+      border: 1px solid rgba(148,163,184,0.4);
+    }
+    .headline {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .copy {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #e5e7eb;
+    }
+    .copy span.highlight {
+      font-weight: 700;
+      color: #22c55e;
+    }
+    .copy span.token {
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .field {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .field label {
+      color: #cbd5f5;
+    }
+    .field input {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(148,163,184,0.6);
+      background: rgba(15,23,42,0.9);
+      color: #e5e7eb;
+      font-size: 13px;
+    }
+    .field input:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56,189,248,0.5);
+    }
+    .primary-btn {
+      margin-top: 14px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #0b1120;
+      background: linear-gradient(90deg, #22c55e, #0ea5e9);
+    }
+    .primary-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #a5b4fc;
+      min-height: 14px;
+    }
+    .wallet {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(15,23,42,0.9);
+      border: 1px solid rgba(148,163,184,0.4);
+      font-size: 12px;
+    }
+    .wallet-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+    .footer {
+      margin-top: 14px;
+      font-size: 10px;
+      text-align: center;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="studio">CIPHERMINT™ STUDIOS</div>
+    <div class="title">RackDog™ Gaming Wallet</div>
+    <div class="badge">Powered by CipherMint™ Gaming Gateway</div>
+
+    <div class="tabs">
+      <button class="tab active">Welcome</button>
+      <button class="tab">Create Account</button>
+      <button class="tab">Add Card</button>
+      <button class="tab">Wallet</button>
+      <button class="tab">Withdraw</button>
+    </div>
+
+    <div class="card">
+      <div class="headline">Turn Playtime into Real Value</div>
+      <p class="copy">
+        This RackDog™ demo shows how a player can
+        <span class="highlight">create an account</span>,
+        instantly receive a
+        <span class="token">100 RACKDOG™</span> sign-up bonus,
+        and later <span class="highlight">withdraw value to their card</span> —
+        using the same logic we wire into the CipherMint™ Gaming Gateway.
+      </p>
+
+      <div class="field">
+        <label for="alias">Gamer tag</label>
+        <input id="alias" placeholder="GhostPlayer, RackSniper, etc." />
+      </div>
+
+      <button id="signupBtn" class="primary-btn">
+        <span>Start Demo • Create Wallet</span>
+      </button>
+
+      <div id="status" class="status"></div>
+
+      <div id="wallet" class="wallet" style="display:none;">
+        <div><strong>Demo Wallet</strong></div>
+        <div class="wallet-row">
+          <span>Player ID</span>
+          <span id="walletPlayerId"></span>
+        </div>
+        <div class="wallet-row">
+          <span>Alias</span>
+          <span id="walletAlias"></span>
+        </div>
+        <div class="wallet-row">
+          <span>RACKDOG™ Balance</span>
+          <span id="walletRackdog"></span>
+        </div>
+      </div>
+
+      <div class="footer">
+        Demo only – in a live integration, these balances are powered by the CipherMint™ chain and can be spent in-game or withdrawn to a player’s card.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const signupBtn = document.getElementById("signupBtn");
+    const aliasInput = document.getElementById("alias");
+    const statusEl = document.getElementById("status");
+    const walletEl = document.getElementById("wallet");
+    const walletPlayerId = document.getElementById("walletPlayerId");
+    const walletAlias = document.getElementById("walletAlias");
+    const walletRackdog = document.getElementById("walletRackdog");
+
+    async function createWallet() {
+      signupBtn.disabled = true;
+      statusEl.textContent = "Creating wallet and allocating 100 RACKDOG™…";
+
+      const alias = aliasInput.value.trim();
+
+      try {
+        const res = await fetch("/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ alias }),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || "Signup failed");
+        }
+
+        const data = await res.json();
+
+        walletPlayerId.textContent = data.player_id;
+        walletAlias.textContent = data.alias;
+        walletRackdog.textContent = (data.balances && data.balances.RACKDOG) || 0;
+        walletEl.style.display = "block";
+
+        statusEl.textContent = "Wallet created • 100 RACKDOG™ credited as a sign-up bonus.";
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error: " + err.message;
+      } finally {
+        signupBtn.disabled = false;
+      }
+    }
+
+    signupBtn.addEventListener("click", createWallet);
+  </script>
+</body>
+</html>
